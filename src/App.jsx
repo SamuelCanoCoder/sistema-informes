@@ -13,8 +13,9 @@ function App() {
 
   const today = new Date();
   const diaActual = today.getDate();
-  const sistemaAbierto = diaActual >= 1 && diaActual <= 10;
-
+  const sistemaAbierto = diaActual >= 1 && diaActual <= 12;
+  /* const sistemaAbierto = false;
+ */
   useEffect(() => { 
     if (sistemaAbierto) {
       getData()
@@ -26,7 +27,7 @@ function App() {
     }
   }, [sistemaAbierto]);
 
-  // 1. PANTALLA DE SISTEMA CERRADO (Si no estamos entre el 1 y el 10)
+  // 1. PANTALLA DE SISTEMA CERRADO (Si no estamos entre el 1 y el 12)
   if (!sistemaAbierto) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 font-sans text-center">
@@ -37,7 +38,7 @@ function App() {
             El periodo para enviar los informes de predicación ha finalizado.
           </p>
           <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800 text-sm text-slate-400">
-            Recuerda que el sistema se habilita automáticamente del <br /><strong className="text-blue-400">1 al 10 de cada mes</strong>. <br/><br/>
+            Recuerda que el sistema se habilita automáticamente del <br /><strong className="text-blue-400">1 al 12 de cada mes</strong>. <br/><br/>
             Si tuviste un inconveniente y necesitas reportar fuera de plazo, por favor comunícate directamente con el secretario.
           </div>
         </div>

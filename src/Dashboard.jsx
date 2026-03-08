@@ -1,12 +1,14 @@
-import { useState } from 'react';
-import { postInforme } from './api';
+import { useState, useEffect } from 'react';
+import { postInforme, getData } from './api'; // <-- IMPORTAMOS getData TAMBIÉN
 
 const Dashboard = ({ grupoId, publicadores, informes, onLogout }) => {
+  // 1. Convertimos los informes en un Estado Local para poder actualizarlos "en vivo"
+  const [listaInformes, setListaInformes] = useState(informes);
+  
   const [borradores, setBorradores] = useState({});
   const [enviando, setEnviando] = useState(false);
   const [toast, setToast] = useState({ visible: false, mensaje: '', tipo: 'success' });
 
-  // 1. CALCULAR EL MES ANTERIOR (Ej: "FEBRERO 2026")
   const fechaMesAnterior = new Date();
   fechaMesAnterior.setMonth(fechaMesAnterior.getMonth() - 1);
   const mesInformeStr = fechaMesAnterior.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
@@ -15,13 +17,30 @@ const Dashboard = ({ grupoId, publicadores, informes, onLogout }) => {
     setToast({ visible: true, mensaje, tipo });
     setTimeout(() => {
       setToast(prev => ({ ...prev, visible: false }));
-    }, 4000); 
+    }, 4500); 
   };
 
   const integrantes = publicadores.filter(p => p[1] == grupoId);
 
-  // 2. LÓGICA DE VALIDACIÓN: Usamos el índice 7 (Columna H) para verificar el mes
-  const reportados = informes
+  // 2. SINCRONIZACIÓN SILENCIOSA (El efecto "Tiempo Real")
+  useEffect(() => {
+    const intervalo = setInterval(async () => {
+      try {
+        const datosFrescos = await getData();
+        if (datosFrescos && datosFrescos.informes) {
+          // Si hay datos nuevos, actualizamos la pantalla sin que el usuario se dé cuenta
+          setListaInformes(datosFrescos.informes);
+        }
+      } catch (error) {
+        // Ignoramos errores de red silenciosos para no molestar al usuario
+      }
+    }, 15000); // Revisa cada 3 segundos
+
+    return () => clearInterval(intervalo); // Limpia el intervalo si cerramos sesión
+  }, []);
+
+  // Usamos listaInformes (el estado en vivo) en lugar del 'informes' estático
+  const reportados = listaInformes
     .filter(i => i[7] === mesInformeStr) 
     .map(i => i[2]);
 
@@ -43,15 +62,15 @@ const Dashboard = ({ grupoId, publicadores, informes, onLogout }) => {
     });
   };
 
-  // 3. ENVIAR TODO (Adaptado para la nueva API sin 'await')
-  const enviarTodo = () => { // Ya no es async
+  // 3. ENVÍO CON VALIDACIÓN ANTI-DUPLICADOS
+  const enviarTodo = async () => { 
     const nombresBorrador = Object.keys(borradores);
     if (nombresBorrador.length === 0) return;
 
-    setEnviando(true); // Encendemos spinner
+    setEnviando(true); 
 
     try {
-      // Empaquetamos
+      // a) Empaquetamos lo que el usuario quiere enviar
       const paqueteInformes = nombresBorrador.map(nombre => {
         const datos = borradores[nombre];
         return {
@@ -61,26 +80,43 @@ const Dashboard = ({ grupoId, publicadores, informes, onLogout }) => {
           horas: datos.horas || 0,
           estudios: datos.estudios || 0,
           revisitas: datos.revisitas || 0,
-          mesInforme: mesInformeStr // ENVIAMOS EL MES EXACTO
+          mesInforme: mesInformeStr
         };
       }).filter(informe => informe.activo === 'SI' || informe.activo === 'NO'); 
 
-      if (paqueteInformes.length > 0) {
-        // Ejecutamos el post (Fire and Forget)
-        postInforme({ informes: paqueteInformes });
+      // b) VALIDACIÓN JUST-IN-TIME: Descargamos la base de datos en este milisegundo
+      const datosUltimoSegundo = await getData();
+      const reportadosOficiales = datosUltimoSegundo.informes
+        .filter(i => i[7] === mesInformeStr)
+        .map(i => i[2]);
+
+      // c) Filtramos: Solo enviamos a los que NO están en la base de datos oficial
+      const paqueteSeguro = paqueteInformes.filter(inf => !reportadosOficiales.includes(inf.nombre));
+      
+      const duplicadosEvitados = paqueteInformes.length - paqueteSeguro.length;
+
+      // d) Enviamos solo el paquete seguro
+      if (paqueteSeguro.length > 0) {
+        postInforme({ informes: paqueteSeguro }); 
         
-        // TRUCO: Inyectamos los datos en memoria para actualizar las tarjetas al instante
-        paqueteInformes.forEach(inf => {
-          informes.push([
-            new Date(), inf.idGrupo, inf.nombre, inf.activo, 
-            inf.horas, inf.estudios, inf.revisitas, inf.mesInforme
-          ]);
-        });
+        // Actualizamos la pantalla local de forma segura e inmutable
+        const nuevosRegistros = paqueteSeguro.map(inf => [
+          new Date(), inf.idGrupo, inf.nombre, inf.activo, 
+          inf.horas, inf.estudios, inf.revisitas, inf.mesInforme
+        ]);
+        setListaInformes(prev => [...prev, ...nuevosRegistros]);
       }
 
-      // Simulamos 1.5 seg de carga para que el usuario sepa que algo pasó, luego limpiamos
+      // e) Notificamos al usuario según lo que pasó
       setTimeout(() => {
-        mostrarToast(`¡${paqueteInformes.length} informes guardados! ✅`, 'success');
+        if (duplicadosEvitados > 0 && paqueteSeguro.length > 0) {
+          mostrarToast(`Se enviaron ${paqueteSeguro.length}. Se ignoraron ${duplicadosEvitados} que otro encargado ya había reportado. ⚠️`, 'success');
+        } else if (duplicadosEvitados > 0 && paqueteSeguro.length === 0) {
+          mostrarToast(`Alguien más ya había enviado estos ${duplicadosEvitados} informes. No se guardaron duplicados. 👍`, 'success');
+        } else {
+          mostrarToast(`¡${paqueteSeguro.length} informes guardados exitosamente! ✅`, 'success');
+        }
+        
         setBorradores({});
         setEnviando(false);
       }, 1500);
@@ -96,27 +132,23 @@ const Dashboard = ({ grupoId, publicadores, informes, onLogout }) => {
 
   return (
     <>
-      {/* ALERTA TOAST FLOTANTE */}
       <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[200] transition-all duration-300 ${toast.visible ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
-        <div className={`px-6 py-3 rounded-full shadow-xl text-sm font-semibold flex items-center gap-2 border ${toast.tipo === 'success' ? 'bg-green-900/90 text-green-200 border-green-700 backdrop-blur-md' : 'bg-red-900/90 text-red-200 border-red-700 backdrop-blur-md'}`}>
+        <div className={`px-6 py-3 rounded-full shadow-xl text-sm font-semibold flex items-center gap-2 border ${toast.tipo === 'success' ? 'bg-green-900/90 text-green-200 border-green-700 backdrop-blur-md' : 'bg-orange-900/90 text-orange-200 border-orange-700 backdrop-blur-md'}`}>
           {toast.mensaje}
         </div>
       </div>
 
-      {/* PANTALLA DE BLOQUEO Y CARGA */}
       {enviando && (
         <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center transition-all">
           <div className="w-16 h-16 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin mb-6 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
-          <h3 className="text-2xl font-bold text-white mb-2 animate-pulse">Guardando informes...</h3>
+          <h3 className="text-2xl font-bold text-white mb-2 animate-pulse">Verificando y Guardando...</h3>
           <p className="text-blue-400 font-medium">Por favor, no cierres esta ventana.</p>
         </div>
       )}
 
-      {/* CONTENEDOR PRINCIPAL */}
       <div className={`min-h-screen bg-slate-950 p-4 sm:p-6 font-sans text-slate-200 pb-48 ${enviando ? 'pointer-events-none blur-[1px]' : ''}`}>
         <div className="max-w-2xl mx-auto relative">
 
-          {/* Encabezado */}
           <div className="flex justify-between items-center mb-8 bg-slate-900 p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-800">
             <div>
               <h2 className="text-2xl font-bold text-blue-400">Grupo {grupoId}</h2>
@@ -128,7 +160,6 @@ const Dashboard = ({ grupoId, publicadores, informes, onLogout }) => {
             </button>
           </div>
 
-          {/* Lista de Publicadores */}
           <div className="space-y-4">
             {integrantes.map((persona, index) => {
               const nombre = persona[2];
