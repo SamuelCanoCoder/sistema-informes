@@ -1,4 +1,4 @@
-const URL = "https://script.google.com/macros/s/AKfycbzgHptySjPd5qu2vN99bl-4uuXqbyCgsDFXQCIghN1TJLgdgaco2gXneUOLKDceJHg2cA/exec";
+const URL = "https://script.google.com/macros/s/AKfycbzAMYiXgHteQIJyiBD3d8kxppBJZTw75GztfMrRrFaSPKB-TmIWNXZAo-Y1g1C8unBvYA/exec";
 
 export const getData = async () => {
   const response = await fetch(URL);

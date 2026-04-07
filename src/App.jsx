@@ -9,21 +9,21 @@ function App() {
     const datosGuardados = localStorage.getItem('informes_cache');
     return datosGuardados ? JSON.parse(datosGuardados) : null;
   });
-  const [auth, setAuth] = useState(null); 
+  const [auth, setAuth] = useState(null);
 
   const today = new Date();
   const diaActual = today.getDate();
   const sistemaAbierto = diaActual >= 1 && diaActual <= 12;
   /* const sistemaAbierto = false;
  */
-  useEffect(() => { 
+  useEffect(() => {
     if (sistemaAbierto) {
       getData()
         .then(res => {
           setData(res); // Actualiza la pantalla con datos frescos
           localStorage.setItem('informes_cache', JSON.stringify(res)); // Guarda la nueva copia
         })
-        .catch(err => console.error("Error cargando datos:", err)); 
+        .catch(err => console.error("Error cargando datos:", err));
     }
   }, [sistemaAbierto]);
 
@@ -38,7 +38,7 @@ function App() {
             El periodo para enviar los informes de predicación ha finalizado.
           </p>
           <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800 text-sm text-slate-400">
-            Recuerda que el sistema se habilita automáticamente del <br /><strong className="text-blue-400">1 al 12 de cada mes</strong>. <br/><br/>
+            Recuerda que el sistema se habilita automáticamente del <br /><strong className="text-blue-400">1 al 12 de cada mes</strong>. <br /><br />
             Si tuviste un inconveniente y necesitas reportar fuera de plazo, por favor comunícate directamente con el secretario.
           </div>
         </div>
@@ -64,10 +64,11 @@ function App() {
 
   // 4. Mostrar el Dashboard si todo está correcto
   return (
-    <Dashboard 
-      grupoId={auth.idGrupo} 
-      publicadores={data.publicadores} 
-      informes={data.informes} 
+    <Dashboard
+      grupoId={auth.idGrupo}
+      publicadores={data.publicadores}
+      informes={data.informes}
+      grupos={data.grupos}   
       onLogout={() => setAuth(null)}
     />
   );
